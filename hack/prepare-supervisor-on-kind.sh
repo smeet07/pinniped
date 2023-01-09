@@ -156,14 +156,6 @@ spec:
   claims:
     username: "$PINNIPED_TEST_SUPERVISOR_UPSTREAM_OIDC_USERNAME_CLAIM"
     groups: "$PINNIPED_TEST_SUPERVISOR_UPSTREAM_OIDC_GROUPS_CLAIM"
-    # TODO: This is just an experiment. Don't really want to commit additionalClaimMappings in this file.
-    additionalClaimMappings:
-      upstream_sub: sub
-      upstream_email: email
-      upstream_email_verified: email_verified
-      upstream_name: name
-      upstream_exp: exp
-      upstream_does_not_exist: foobaz
   client:
     secretName: my-oidc-provider-client-secret
 EOF

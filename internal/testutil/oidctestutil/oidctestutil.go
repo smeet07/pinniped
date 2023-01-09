@@ -1108,6 +1108,8 @@ func validateAuthcodeStorage(
 		actualAdditionalClaims, ok := actualClaims.Get("additionalClaims").(map[string]interface{})
 		require.True(t, ok, "expected additionalClaims to be a map[string]interface{}")
 		require.Equal(t, wantAdditionalClaims, actualAdditionalClaims)
+	} else {
+		require.Nil(t, actualClaims.Get("additionalClaims"), "additionalClaims must be nil when there are no wanted additional claims")
 	}
 
 	// Make sure that we asserted on every extra claim.
