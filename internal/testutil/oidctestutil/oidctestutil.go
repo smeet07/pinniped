@@ -928,6 +928,7 @@ func VerifyECDSAIDToken(
 	return token
 }
 
+// RequireAuthCodeRegexpMatch TODO (jtc): rename me?
 func RequireAuthCodeRegexpMatch(
 	t *testing.T,
 	actualContent string,
@@ -1109,6 +1110,7 @@ func validateAuthcodeStorage(
 		require.True(t, ok, "expected additionalClaims to be a map[string]interface{}")
 		require.Equal(t, wantAdditionalClaims, actualAdditionalClaims)
 	} else {
+		// TODO: change assertion to verify that key `additionalClaims` DNE in actualClaims
 		require.Nil(t, actualClaims.Get("additionalClaims"), "additionalClaims must be nil when there are no wanted additional claims")
 	}
 

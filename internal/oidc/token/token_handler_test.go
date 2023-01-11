@@ -285,6 +285,7 @@ type tokenEndpointResponseExpectedValues struct {
 	wantUpstreamOIDCValidateTokenCall *expectedUpstreamValidateTokens
 	wantCustomSessionDataStored       *psession.CustomSessionData
 	wantWarnings                      []RecordedWarning
+	wantAdditionalClaims              map[string]interface{}
 }
 
 type authcodeExchangeInputs struct {
@@ -297,6 +298,7 @@ type authcodeExchangeInputs struct {
 	)
 	makeOathHelper    OauthHelperFactoryFunc
 	customSessionData *psession.CustomSessionData
+	modifySession     func(*psession.PinnipedSession)
 	want              tokenEndpointResponseExpectedValues
 }
 
@@ -341,6 +343,33 @@ func TestTokenEndpointAuthcodeExchange(t *testing.T) {
 					wantGrantedScopes:     []string{"openid", "username", "groups"},
 					wantUsername:          goodUsername,
 					wantGroups:            goodGroups,
+				},
+			},
+		},
+		{
+			name: "request is valid and tokens are issued with additional claims",
+			authcodeExchange: authcodeExchangeInputs{
+				modifyAuthRequest: func(r *http.Request) { r.Form.Set("scope", "openid profile email username groups") },
+				modifySession: func(session *psession.PinnipedSession) {
+					session.IDTokenClaims().Extra["additionalClaims"] = map[string]interface{}{
+						"upstream1": "value1",
+						"upstream2": "value2",
+						"upstream3": "value3",
+					}
+				},
+				want: tokenEndpointResponseExpectedValues{
+					wantStatus:            http.StatusOK,
+					wantClientID:          pinnipedCLIClientID,
+					wantSuccessBodyFields: []string{"id_token", "access_token", "token_type", "scope", "expires_in"}, // no refresh token
+					wantRequestedScopes:   []string{"openid", "profile", "email", "username", "groups"},
+					wantGrantedScopes:     []string{"openid", "username", "groups"},
+					wantUsername:          goodUsername,
+					wantGroups:            goodGroups,
+					wantAdditionalClaims: map[string]interface{}{
+						"upstream1": "value1",
+						"upstream2": "value2",
+						"upstream3": "value3",
+					},
 				},
 			},
 		},
@@ -3853,10 +3882,10 @@ func exchangeAuthcodeForTokens(
 	// Use lower minimum required bcrypt cost than we would use in production to keep unit the tests fast.
 	oauthStore = oidc.NewKubeStorage(secrets, oidcClientsClient, oidc.DefaultOIDCTimeoutsConfiguration(), bcrypt.MinCost)
 	if test.makeOathHelper != nil {
-		oauthHelper, authCode, jwtSigningKey = test.makeOathHelper(t, authRequest, oauthStore, test.customSessionData)
+		oauthHelper, authCode, jwtSigningKey = test.makeOathHelper(t, authRequest, oauthStore, test.customSessionData, test.modifySession)
 	} else {
 		// Note that makeHappyOauthHelper() calls simulateAuthEndpointHavingAlreadyRun() to preload the session storage.
-		oauthHelper, authCode, jwtSigningKey = makeHappyOauthHelper(t, authRequest, oauthStore, test.customSessionData)
+		oauthHelper, authCode, jwtSigningKey = makeHappyOauthHelper(t, authRequest, oauthStore, test.customSessionData, test.modifySession)
 	}
 
 	if test.modifyStorage != nil {
@@ -3948,7 +3977,7 @@ func requireTokenEndpointBehavior(
 		expectedNumberOfIDSessionsStored := 0
 		if wantIDToken {
 			expectedNumberOfIDSessionsStored = 1
-			requireValidIDToken(t, parsedResponseBody, jwtSigningKey, test.wantClientID, wantNonceValueInIDToken, test.wantUsername, test.wantGroups, parsedResponseBody["access_token"].(string), requestTime)
+			requireValidIDToken(t, parsedResponseBody, jwtSigningKey, test.wantClientID, wantNonceValueInIDToken, test.wantUsername, test.wantGroups, test.wantAdditionalClaims, parsedResponseBody["access_token"].(string), requestTime)
 		}
 		if wantRefreshToken {
 			requireValidRefreshTokenStorage(t, parsedResponseBody, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, test.wantUsername, test.wantGroups, test.wantCustomSessionDataStored, secrets, requestTime)
@@ -4058,6 +4087,7 @@ type OauthHelperFactoryFunc func(
 	authRequest *http.Request,
 	store fositestoragei.AllFositeStorage,
 	initialCustomSessionData *psession.CustomSessionData,
+	sessionModifier func(session *psession.PinnipedSession),
 ) (fosite.OAuth2Provider, string, *ecdsa.PrivateKey)
 
 func makeHappyOauthHelper(
@@ -4065,12 +4095,13 @@ func makeHappyOauthHelper(
 	authRequest *http.Request,
 	store fositestoragei.AllFositeStorage,
 	initialCustomSessionData *psession.CustomSessionData,
+	sessionModifier func(session *psession.PinnipedSession),
 ) (fosite.OAuth2Provider, string, *ecdsa.PrivateKey) {
 	t.Helper()
 
 	jwtSigningKey, jwkProvider := generateJWTSigningKeyAndJWKSProvider(t, goodIssuer)
 	oauthHelper := oidc.FositeOauth2Helper(store, goodIssuer, hmacSecretFunc, jwkProvider, oidc.DefaultOIDCTimeoutsConfiguration())
-	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData)
+	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData, sessionModifier)
 	return oauthHelper, authResponder.GetCode(), jwtSigningKey
 }
 
@@ -4092,12 +4123,13 @@ func makeOauthHelperWithJWTKeyThatWorksOnlyOnce(
 	authRequest *http.Request,
 	store fositestoragei.AllFositeStorage,
 	initialCustomSessionData *psession.CustomSessionData,
+	modifySession func(session *psession.PinnipedSession),
 ) (fosite.OAuth2Provider, string, *ecdsa.PrivateKey) {
 	t.Helper()
 
 	jwtSigningKey, jwkProvider := generateJWTSigningKeyAndJWKSProvider(t, goodIssuer)
 	oauthHelper := oidc.FositeOauth2Helper(store, goodIssuer, hmacSecretFunc, &singleUseJWKProvider{DynamicJWKSProvider: jwkProvider}, oidc.DefaultOIDCTimeoutsConfiguration())
-	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData)
+	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData, modifySession)
 	return oauthHelper, authResponder.GetCode(), jwtSigningKey
 }
 
@@ -4106,12 +4138,13 @@ func makeOauthHelperWithNilPrivateJWTSigningKey(
 	authRequest *http.Request,
 	store fositestoragei.AllFositeStorage,
 	initialCustomSessionData *psession.CustomSessionData,
+	modifySession func(session *psession.PinnipedSession),
 ) (fosite.OAuth2Provider, string, *ecdsa.PrivateKey) {
 	t.Helper()
 
 	jwkProvider := jwks.NewDynamicJWKSProvider() // empty provider which contains no signing key for this issuer
 	oauthHelper := oidc.FositeOauth2Helper(store, goodIssuer, hmacSecretFunc, jwkProvider, oidc.DefaultOIDCTimeoutsConfiguration())
-	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData)
+	authResponder := simulateAuthEndpointHavingAlreadyRun(t, authRequest, oauthHelper, initialCustomSessionData, modifySession)
 	return oauthHelper, authResponder.GetCode(), nil
 }
 
@@ -4121,6 +4154,7 @@ func simulateAuthEndpointHavingAlreadyRun(
 	authRequest *http.Request,
 	oauthHelper fosite.OAuth2Provider,
 	initialCustomSessionData *psession.CustomSessionData,
+	modifySession func(session *psession.PinnipedSession),
 ) fosite.AuthorizeResponder {
 	// We only set the fields in the session that Fosite wants us to set.
 	ctx := context.Background()
@@ -4137,6 +4171,10 @@ func simulateAuthEndpointHavingAlreadyRun(
 		},
 		Custom: initialCustomSessionData,
 	}
+	if modifySession != nil {
+		modifySession(session)
+	}
+
 	authRequester, err := oauthHelper.NewAuthorizeRequest(ctx, authRequest)
 	require.NoError(t, err)
 	if strings.Contains(authRequest.Form.Get("scope"), "openid") {
@@ -4518,6 +4556,7 @@ func requireValidIDToken(
 	wantNonceValueInIDToken bool,
 	wantUsernameInIDToken string,
 	wantGroupsInIDToken []string,
+	wantAdditionalClaims map[string]interface{},
 	actualAccessToken string,
 	requestTime time.Time,
 ) {
@@ -4532,18 +4571,19 @@ func requireValidIDToken(
 	token := oidctestutil.VerifyECDSAIDToken(t, goodIssuer, wantClientID, jwtSigningKey, idTokenString)
 
 	var claims struct {
-		Subject         string   `json:"sub"`
-		Audience        []string `json:"aud"`
-		Issuer          string   `json:"iss"`
-		JTI             string   `json:"jti"`
-		Nonce           string   `json:"nonce"`
-		AccessTokenHash string   `json:"at_hash"`
-		ExpiresAt       int64    `json:"exp"`
-		IssuedAt        int64    `json:"iat"`
-		RequestedAt     int64    `json:"rat"`
-		AuthTime        int64    `json:"auth_time"`
-		Groups          []string `json:"groups"`
-		Username        string   `json:"username"`
+		Subject          string                 `json:"sub"`
+		Audience         []string               `json:"aud"`
+		Issuer           string                 `json:"iss"`
+		JTI              string                 `json:"jti"`
+		Nonce            string                 `json:"nonce"`
+		AccessTokenHash  string                 `json:"at_hash"`
+		ExpiresAt        int64                  `json:"exp"`
+		IssuedAt         int64                  `json:"iat"`
+		RequestedAt      int64                  `json:"rat"`
+		AuthTime         int64                  `json:"auth_time"`
+		Groups           []string               `json:"groups"`
+		Username         string                 `json:"username"`
+		AdditionalClaims map[string]interface{} `json:"additionalClaims"`
 	}
 
 	idTokenFields := []string{"sub", "aud", "iss", "jti", "auth_time", "exp", "iat", "rat", "azp", "at_hash"}
@@ -4555,6 +4595,9 @@ func requireValidIDToken(
 	}
 	if wantGroupsInIDToken != nil {
 		idTokenFields = append(idTokenFields, "groups")
+	}
+	if len(wantAdditionalClaims) > 0 {
+		idTokenFields = append(idTokenFields, "additionalClaims")
 	}
 
 	// make sure that these are the only fields in the token
@@ -4573,6 +4616,8 @@ func requireValidIDToken(
 	require.Equal(t, wantClientID, m["azp"])
 	require.Equal(t, goodIssuer, claims.Issuer)
 	require.NotEmpty(t, claims.JTI)
+	require.Equal(t, wantAdditionalClaims, claims.AdditionalClaims)
+	require.NotEqual(t, map[string]interface{}{}, claims.AdditionalClaims, "additionalClaims may never be present and empty in the id token")
 
 	if wantNonceValueInIDToken {
 		require.Equal(t, goodNonce, claims.Nonce)

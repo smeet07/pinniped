@@ -74,6 +74,7 @@ func MakeDownstreamSession(
 		extras[oidcapi.IDTokenClaimGroups] = groups
 	}
 	if len(additionalClaims) > 0 {
+		// TODO: make "additionalClaims" a string constant, possibly in oidcapi?
 		extras["additionalClaims"] = additionalClaims
 	}
 	openIDSession.IDTokenClaims().Extra = extras
