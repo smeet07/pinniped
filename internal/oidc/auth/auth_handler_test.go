@@ -747,6 +747,34 @@ func TestAuthorizationEndpoint(t *testing.T) {
 			},
 		},
 		{
+			name: "OIDC upstream password grant happy path using GET with additional claim mappings, when upstream claims are not available",
+			idps: oidctestutil.NewUpstreamIDPListerBuilder().WithOIDC(passwordGrantUpstreamOIDCIdentityProviderBuilder().
+				WithAdditionalClaimMappings(map[string]string{
+					"downstream": "upstream",
+				}).
+				WithIDTokenClaim("not-upstream", "value").
+				Build()),
+			method:                            http.MethodGet,
+			path:                              happyGetRequestPath,
+			customUsernameHeader:              pointer.String(oidcUpstreamUsername),
+			customPasswordHeader:              pointer.String(oidcUpstreamPassword),
+			wantPasswordGrantCall:             happyUpstreamPasswordGrantMockExpectation,
+			wantStatus:                        http.StatusFound,
+			wantContentType:                   htmlContentType,
+			wantRedirectLocationRegexp:        happyAuthcodeDownstreamRedirectLocationRegexp,
+			wantDownstreamIDTokenSubject:      oidcUpstreamIssuer + "?sub=" + oidcUpstreamSubjectQueryEscaped,
+			wantDownstreamIDTokenUsername:     oidcUpstreamUsername,
+			wantDownstreamIDTokenGroups:       oidcUpstreamGroupMembership,
+			wantDownstreamRequestedScopes:     happyDownstreamScopesRequested,
+			wantDownstreamRedirectURI:         downstreamRedirectURI,
+			wantDownstreamGrantedScopes:       happyDownstreamScopesGranted,
+			wantDownstreamNonce:               downstreamNonce,
+			wantDownstreamPKCEChallenge:       downstreamPKCEChallenge,
+			wantDownstreamPKCEChallengeMethod: downstreamPKCEChallengeMethod,
+			wantDownstreamCustomSessionData:   expectedHappyOIDCPasswordGrantCustomSession,
+			wantAdditionalClaims:              nil, // downstream claims are empty
+		},
+		{
 			name:                              "LDAP cli upstream happy path using GET",
 			idps:                              oidctestutil.NewUpstreamIDPListerBuilder().WithLDAP(&upstreamLDAPIdentityProvider),
 			method:                            http.MethodGet,
