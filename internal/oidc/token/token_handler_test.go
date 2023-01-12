@@ -899,7 +899,7 @@ func TestTokenEndpointWhenAuthcodeIsUsedTwice(t *testing.T) {
 				test.authcodeExchange.want.wantClientID,
 				test.authcodeExchange.want.wantRequestedScopes, test.authcodeExchange.want.wantGrantedScopes,
 				test.authcodeExchange.want.wantUsername, test.authcodeExchange.want.wantGroups,
-				nil, approxRequestTime)
+				nil, test.authcodeExchange.want.wantAdditionalClaims, approxRequestTime)
 
 			// Check that the access token and refresh token storage were both deleted, and the number of other storage objects did not change.
 			testutil.RequireNumberOfSecretsMatchingLabelSelector(t, secrets, labels.Set{crud.SecretLabelKey: authorizationcode.TypeLabelValue}, 1)
@@ -3965,10 +3965,10 @@ func requireTokenEndpointBehavior(
 		wantRefreshToken := contains(test.wantSuccessBodyFields, "refresh_token")
 
 		requireInvalidAuthCodeStorage(t, authCode, oauthStore, secrets, requestTime)
-		requireValidAccessTokenStorage(t, parsedResponseBody, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, test.wantUsername, test.wantGroups, test.wantCustomSessionDataStored, secrets, requestTime)
+		requireValidAccessTokenStorage(t, parsedResponseBody, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, test.wantUsername, test.wantGroups, test.wantCustomSessionDataStored, test.wantAdditionalClaims, secrets, requestTime)
 		requireInvalidPKCEStorage(t, authCode, oauthStore)
 		// Performing a refresh does not update the OIDC storage, so after a refresh it should still have the old custom session data and old username and groups from the initial login.
-		requireValidOIDCStorage(t, parsedResponseBody, authCode, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, oldUsername, oldGroups, oldCustomSessionData, requestTime)
+		requireValidOIDCStorage(t, parsedResponseBody, authCode, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, oldUsername, oldGroups, oldCustomSessionData, test.wantAdditionalClaims, requestTime)
 
 		expectedNumberOfRefreshTokenSessionsStored := 0
 		if wantRefreshToken {
@@ -3980,7 +3980,7 @@ func requireTokenEndpointBehavior(
 			requireValidIDToken(t, parsedResponseBody, jwtSigningKey, test.wantClientID, wantNonceValueInIDToken, test.wantUsername, test.wantGroups, test.wantAdditionalClaims, parsedResponseBody["access_token"].(string), requestTime)
 		}
 		if wantRefreshToken {
-			requireValidRefreshTokenStorage(t, parsedResponseBody, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, test.wantUsername, test.wantGroups, test.wantCustomSessionDataStored, secrets, requestTime)
+			requireValidRefreshTokenStorage(t, parsedResponseBody, oauthStore, test.wantClientID, test.wantRequestedScopes, test.wantGrantedScopes, test.wantUsername, test.wantGroups, test.wantCustomSessionDataStored, test.wantAdditionalClaims, secrets, requestTime)
 		}
 
 		testutil.RequireNumberOfSecretsMatchingLabelSelector(t, secrets, labels.Set{crud.SecretLabelKey: authorizationcode.TypeLabelValue}, 1)
@@ -4250,6 +4250,7 @@ func requireValidRefreshTokenStorage(
 	wantUsername string,
 	wantGroups []string,
 	wantCustomSessionData *psession.CustomSessionData,
+	wantAdditionalClaims map[string]interface{},
 	secrets v1.SecretInterface,
 	requestTime time.Time,
 ) {
@@ -4279,6 +4280,7 @@ func requireValidRefreshTokenStorage(
 		wantUsername,
 		wantGroups,
 		wantCustomSessionData,
+		wantAdditionalClaims,
 		requestTime,
 	)
 
@@ -4295,6 +4297,7 @@ func requireValidAccessTokenStorage(
 	wantUsername string,
 	wantGroups []string,
 	wantCustomSessionData *psession.CustomSessionData,
+	wantAdditionalClaims map[string]interface{},
 	secrets v1.SecretInterface,
 	requestTime time.Time,
 ) {
@@ -4343,6 +4346,7 @@ func requireValidAccessTokenStorage(
 		wantUsername,
 		wantGroups,
 		wantCustomSessionData,
+		wantAdditionalClaims,
 		requestTime,
 	)
 
@@ -4389,6 +4393,7 @@ func requireValidOIDCStorage(
 	wantUsername string,
 	wantGroups []string,
 	wantCustomSessionData *psession.CustomSessionData,
+	wantAdditionalClaims map[string]interface{},
 	requestTime time.Time,
 ) {
 	t.Helper()
@@ -4416,6 +4421,7 @@ func requireValidOIDCStorage(
 			wantUsername,
 			wantGroups,
 			wantCustomSessionData,
+			wantAdditionalClaims,
 			requestTime,
 		)
 	} else {
@@ -4435,6 +4441,7 @@ func requireValidStoredRequest(
 	wantUsername string,
 	wantGroups []string,
 	wantCustomSessionData *psession.CustomSessionData,
+	wantAdditionalClaims map[string]interface{},
 	requestTime time.Time,
 ) {
 	t.Helper()
@@ -4467,6 +4474,9 @@ func requireValidStoredRequest(
 		expectedExtra["groups"] = toSliceOfInterface(wantGroups)
 	}
 	expectedExtra["azp"] = wantClientID
+	if len(wantAdditionalClaims) > 0 {
+		expectedExtra["additionalClaims"] = wantAdditionalClaims
+	}
 	require.Equal(t, expectedExtra, claims.Extra)
 
 	// We are in charge of setting these fields. For the purpose of testing, we ensure that the
