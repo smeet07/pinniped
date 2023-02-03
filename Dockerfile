@@ -21,6 +21,7 @@ RUN \
   export CGO_ENABLED=0 && \
   export GOOS=linux && \
   export GOARCH=amd64 && \
+  export GOEXPERIMENT=boringcrypto && \
   go build -v -trimpath -ldflags "$(hack/get-ldflags.sh) -w -s" -o /usr/local/bin/pinniped-concierge-kube-cert-agent ./cmd/pinniped-concierge-kube-cert-agent/... && \
   go build -v -trimpath -ldflags "$(hack/get-ldflags.sh) -w -s" -o /usr/local/bin/pinniped-server ./cmd/pinniped-server/... && \
   ln -s /usr/local/bin/pinniped-server /usr/local/bin/pinniped-concierge && \
