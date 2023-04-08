@@ -22,9 +22,9 @@ import (
 	// decided by the kube cert agent controller in the Concierge).
 	//
 	//nolint:godot // This is not sentence, it is a commented out line of import code.
-	//_ "go.pinniped.dev/internal/crypto/ptls"
+	// _ "go.pinniped.dev/internal/crypto/ptls"
 
-	// This side effect ensures building with at least go1.19
+	// This side effect ensures building with at least go1.19.
 	_ "go.pinniped.dev/internal/build"
 )
 
