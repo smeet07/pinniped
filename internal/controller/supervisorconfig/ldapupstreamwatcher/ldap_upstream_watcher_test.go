@@ -1,4 +1,4 @@
-// Copyright 2020-2022 the Pinniped contributors. All Rights Reserved.
+// Copyright 2020-2023 the Pinniped contributors. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 package ldapupstreamwatcher
@@ -30,6 +30,7 @@ import (
 	"go.pinniped.dev/internal/endpointaddr"
 	"go.pinniped.dev/internal/mocks/mockldapconn"
 	"go.pinniped.dev/internal/oidc/provider"
+	"go.pinniped.dev/internal/oidc/provider/upstreamprovider"
 	"go.pinniped.dev/internal/testutil"
 	"go.pinniped.dev/internal/upstreamldap"
 )
@@ -1127,7 +1128,7 @@ func TestLDAPUpstreamWatcherControllerSync(t *testing.T) {
 			fakeKubeClient := fake.NewSimpleClientset(tt.inputSecrets...)
 			kubeInformers := informers.NewSharedInformerFactory(fakeKubeClient, 0)
 			cache := provider.NewDynamicUpstreamIDPProvider()
-			cache.SetLDAPIdentityProviders([]provider.UpstreamLDAPIdentityProviderI{
+			cache.SetLDAPIdentityProviders([]upstreamprovider.UpstreamLDAPIdentityProviderI{
 				upstreamldap.New(upstreamldap.ProviderConfig{Name: "initial-entry"}),
 			})
 

@@ -1,4 +1,4 @@
-// Copyright 2021-2022 the Pinniped contributors. All Rights Reserved.
+// Copyright 2021-2023 the Pinniped contributors. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 package upstreamwatchers
@@ -15,7 +15,7 @@ import (
 
 	"go.pinniped.dev/generated/latest/apis/supervisor/idp/v1alpha1"
 	"go.pinniped.dev/internal/constable"
-	"go.pinniped.dev/internal/oidc/provider"
+	"go.pinniped.dev/internal/oidc/provider/upstreamprovider"
 	"go.pinniped.dev/internal/plog"
 	"go.pinniped.dev/internal/upstreamldap"
 )
@@ -363,7 +363,7 @@ func validateAndSetLDAPServerConnectivityAndSearchBase(
 	return ldapConnectionValidCondition, searchBaseFoundCondition
 }
 
-func EvaluateConditions(conditions GradatedConditions, config *upstreamldap.ProviderConfig) (provider.UpstreamLDAPIdentityProviderI, bool) {
+func EvaluateConditions(conditions GradatedConditions, config *upstreamldap.ProviderConfig) (upstreamprovider.UpstreamLDAPIdentityProviderI, bool) {
 	for _, gradatedCondition := range conditions.gradatedConditions {
 		if gradatedCondition.condition.Status != v1alpha1.ConditionTrue && gradatedCondition.isFatal {
 			// Invalid provider, so do not load it into the cache.

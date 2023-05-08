@@ -1,4 +1,4 @@
-// Copyright 2021-2022 the Pinniped contributors. All Rights Reserved.
+// Copyright 2021-2023 the Pinniped contributors. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 // Package activedirectoryupstreamwatcher implements a controller which watches ActiveDirectoryIdentityProviders.
@@ -25,7 +25,7 @@ import (
 	"go.pinniped.dev/internal/controller/conditionsutil"
 	"go.pinniped.dev/internal/controller/supervisorconfig/upstreamwatchers"
 	"go.pinniped.dev/internal/controllerlib"
-	"go.pinniped.dev/internal/oidc/provider"
+	"go.pinniped.dev/internal/oidc/provider/upstreamprovider"
 	"go.pinniped.dev/internal/plog"
 	"go.pinniped.dev/internal/upstreamldap"
 )
@@ -220,7 +220,7 @@ func (s *activeDirectoryUpstreamGenericLDAPStatus) Conditions() []v1alpha1.Condi
 
 // UpstreamActiveDirectoryIdentityProviderICache is a thread safe cache that holds a list of validated upstream LDAP IDP configurations.
 type UpstreamActiveDirectoryIdentityProviderICache interface {
-	SetActiveDirectoryIdentityProviders([]provider.UpstreamLDAPIdentityProviderI)
+	SetActiveDirectoryIdentityProviders([]upstreamprovider.UpstreamLDAPIdentityProviderI)
 }
 
 type activeDirectoryWatcherController struct {
@@ -294,7 +294,7 @@ func (c *activeDirectoryWatcherController) Sync(ctx controllerlib.Context) error
 	}
 
 	requeue := false
-	validatedUpstreams := make([]provider.UpstreamLDAPIdentityProviderI, 0, len(actualUpstreams))
+	validatedUpstreams := make([]upstreamprovider.UpstreamLDAPIdentityProviderI, 0, len(actualUpstreams))
 	for _, upstream := range actualUpstreams {
 		valid, requestedRequeue := c.validateUpstream(ctx.Context, upstream)
 		if valid != nil {
@@ -313,7 +313,7 @@ func (c *activeDirectoryWatcherController) Sync(ctx controllerlib.Context) error
 	return nil
 }
 
-func (c *activeDirectoryWatcherController) validateUpstream(ctx context.Context, upstream *v1alpha1.ActiveDirectoryIdentityProvider) (p provider.UpstreamLDAPIdentityProviderI, requeue bool) {
+func (c *activeDirectoryWatcherController) validateUpstream(ctx context.Context, upstream *v1alpha1.ActiveDirectoryIdentityProvider) (p upstreamprovider.UpstreamLDAPIdentityProviderI, requeue bool) {
 	spec := upstream.Spec
 
 	adUpstreamImpl := &activeDirectoryUpstreamGenericLDAPImpl{activeDirectoryIdentityProvider: *upstream}
@@ -338,7 +338,7 @@ func (c *activeDirectoryWatcherController) validateUpstream(ctx context.Context,
 		UIDAttributeParsingOverrides: map[string]func(*ldap.Entry) (string, error){
 			"objectGUID": microsoftUUIDFromBinaryAttr("objectGUID"),
 		},
-		RefreshAttributeChecks: map[string]func(*ldap.Entry, provider.RefreshAttributes) error{
+		RefreshAttributeChecks: map[string]func(*ldap.Entry, upstreamprovider.RefreshAttributes) error{
 			pwdLastSetAttribute:                 upstreamldap.AttributeUnchangedSinceLogin(pwdLastSetAttribute),
 			userAccountControlAttribute:         validUserAccountControl,
 			userAccountControlComputedAttribute: validComputedUserAccountControl,
@@ -437,7 +437,7 @@ func getDomainFromDistinguishedName(distinguishedName string) (string, error) {
 	return strings.Join(domainComponents[1:], "."), nil
 }
 
-func validUserAccountControl(entry *ldap.Entry, _ provider.RefreshAttributes) error {
+func validUserAccountControl(entry *ldap.Entry, _ upstreamprovider.RefreshAttributes) error {
 	userAccountControl, err := strconv.Atoi(entry.GetAttributeValue(userAccountControlAttribute))
 	if err != nil {
 		return err
@@ -450,7 +450,7 @@ func validUserAccountControl(entry *ldap.Entry, _ provider.RefreshAttributes) er
 	return nil
 }
 
-func validComputedUserAccountControl(entry *ldap.Entry, _ provider.RefreshAttributes) error {
+func validComputedUserAccountControl(entry *ldap.Entry, _ upstreamprovider.RefreshAttributes) error {
 	userAccountControl, err := strconv.Atoi(entry.GetAttributeValue(userAccountControlComputedAttribute))
 	if err != nil {
 		return err

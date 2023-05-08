@@ -1,4 +1,4 @@
-// Copyright 2020-2022 the Pinniped contributors. All Rights Reserved.
+// Copyright 2020-2023 the Pinniped contributors. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 // Package server defines the entrypoint for the Pinniped Supervisor server.
@@ -169,6 +169,9 @@ func prepareControllers(
 				clock.RealClock{},
 				pinnipedClient,
 				federationDomainInformer,
+				pinnipedInformers.IDP().V1alpha1().OIDCIdentityProviders(),
+				pinnipedInformers.IDP().V1alpha1().LDAPIdentityProviders(),
+				pinnipedInformers.IDP().V1alpha1().ActiveDirectoryIdentityProviders(),
 				controllerlib.WithInformer,
 			),
 			singletonWorker,
